@@ -47,6 +47,9 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
     n_local_experts = n_experts // mp
     state_dicts = [{} for _ in range(mp)]
 
+    # Normalize and fix the root directory for saving converted checkpoints.
+    save_root = os.path.abspath(os.path.normpath(save_path))
+
     for file_path in tqdm(glob(os.path.join(hf_ckpt_path, "*.safetensors"))):
         with safe_open(file_path, framework="pt", device="cpu") as f:
             for name in f.keys():
@@ -75,14 +78,18 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
                         new_param = param.narrow(dim, i * shard_size, shard_size).contiguous()
                     state_dicts[i][name] = new_param
 
-    os.makedirs(save_path, exist_ok=True)
+    os.makedirs(save_root, exist_ok=True)
 
     for i in trange(mp):
-        save_file(state_dicts[i], os.path.join(save_path, f"model{i}-mp{mp}.safetensors"))
+        save_file(state_dicts[i], os.path.join(save_root, f"model{i}-mp{mp}.safetensors"))
 
     for file_path in glob(os.path.join(hf_ckpt_path, "*token*")):
-        new_file_path = os.path.join(save_path, os.path.basename(file_path))
-        shutil.copyfile(file_path, new_file_path)
+        new_file_path = os.path.join(save_root, os.path.basename(file_path))
+        normalized_new_file_path = os.path.abspath(os.path.normpath(new_file_path))
+        # Ensure the destination file path remains within the intended save_root directory.
+        if os.path.commonpath([save_root, normalized_new_file_path]) != save_root:
+            raise ValueError(f"Refusing to write outside of save directory: {normalized_new_file_path}")
+        shutil.copyfile(file_path, normalized_new_file_path)
 
 
 if __name__ == "__main__":
