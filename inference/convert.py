@@ -47,7 +47,17 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
     n_local_experts = n_experts // mp
     state_dicts = [{} for _ in range(mp)]
 
-    for file_path in tqdm(glob(os.path.join(hf_ckpt_path, "*.safetensors"))):
+    # Normalize and resolve the checkpoint and save directories.
+    hf_ckpt_root = os.path.realpath(hf_ckpt_path)
+    # Constrain the save directory to a safe base directory to avoid writing to arbitrary locations.
+    base_root = os.path.realpath(os.getcwd())
+    candidate_save_root = os.path.realpath(os.path.join(base_root, save_path))
+    # Ensure the final save path is within the chosen base directory.
+    if os.path.commonpath([base_root, candidate_save_root]) != base_root:
+        raise ValueError(f"Requested save path '{save_path}' is not allowed.")
+    save_root = candidate_save_root
+
+    for file_path in tqdm(glob(os.path.join(hf_ckpt_root, "*.safetensors"))):
         with safe_open(file_path, framework="pt", device="cpu") as f:
             for name in f.keys():
                 if "model.layers.61" in name:
@@ -75,14 +85,20 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
                         new_param = param.narrow(dim, i * shard_size, shard_size).contiguous()
                     state_dicts[i][name] = new_param
 
-    os.makedirs(save_path, exist_ok=True)
+    os.makedirs(save_root, exist_ok=True)
 
     for i in trange(mp):
-        save_file(state_dicts[i], os.path.join(save_path, f"model{i}-mp{mp}.safetensors"))
+        save_file(state_dicts[i], os.path.join(save_root, f"model{i}-mp{mp}.safetensors"))
 
-    for file_path in glob(os.path.join(hf_ckpt_path, "*token*")):
-        new_file_path = os.path.join(save_path, os.path.basename(file_path))
-        shutil.copyfile(file_path, new_file_path)
+    for file_path in glob(os.path.join(hf_ckpt_root, "*token*")):
+        # Ensure the resolved source path is within the checkpoint root and is a regular file.
+        src_real = os.path.realpath(file_path)
+        if not src_real.startswith(hf_ckpt_root + os.sep):
+            continue
+        if not os.path.isfile(src_real):
+            continue
+        new_file_path = os.path.join(save_root, os.path.basename(file_path))
+        shutil.copyfile(src_real, new_file_path)
 
 
 if __name__ == "__main__":
