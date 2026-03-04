@@ -47,9 +47,15 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
     n_local_experts = n_experts // mp
     state_dicts = [{} for _ in range(mp)]
 
-    # Normalize and resolve the checkpoint and save directories to avoid path traversal issues.
+    # Normalize and resolve the checkpoint and save directories.
     hf_ckpt_root = os.path.realpath(hf_ckpt_path)
-    save_root = os.path.realpath(save_path)
+    # Constrain the save directory to a safe base directory to avoid writing to arbitrary locations.
+    base_root = os.path.realpath(os.getcwd())
+    candidate_save_root = os.path.realpath(os.path.join(base_root, save_path))
+    # Ensure the final save path is within the chosen base directory.
+    if os.path.commonpath([base_root, candidate_save_root]) != base_root:
+        raise ValueError(f"Requested save path '{save_path}' is not allowed.")
+    save_root = candidate_save_root
 
     for file_path in tqdm(glob(os.path.join(hf_ckpt_root, "*.safetensors"))):
         with safe_open(file_path, framework="pt", device="cpu") as f:
