@@ -29,6 +29,16 @@ def main(fp8_path, bf16_path):
     - The function caches loaded safetensor files to optimize memory usage.
     - The function updates the model index file to remove references to scale_inv tensors.
     """
+    # Normalize and lightly validate user-provided paths to avoid unexpected traversal behavior.
+    raw_fp8_path = fp8_path
+    raw_bf16_path = bf16_path
+    if ".." in os.path.normpath(raw_fp8_path).split(os.path.sep):
+        raise ValueError(f"Invalid fp8_path (contains path traversal components): {raw_fp8_path}")
+    if ".." in os.path.normpath(raw_bf16_path).split(os.path.sep):
+        raise ValueError(f"Invalid bf16_path (contains path traversal components): {raw_bf16_path}")
+    fp8_path = os.path.abspath(os.path.normpath(fp8_path))
+    bf16_path = os.path.abspath(os.path.normpath(bf16_path))
+
     torch.set_default_dtype(torch.bfloat16)
     os.makedirs(bf16_path, exist_ok=True)
     model_index_file = os.path.join(fp8_path, "model.safetensors.index.json")
