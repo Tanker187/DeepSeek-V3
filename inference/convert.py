@@ -43,6 +43,14 @@ def main(hf_ckpt_path, save_path, n_experts, mp):
     Returns:
         None
     """
+    # Normalize and validate the output directory to avoid writing outside the working tree
+    base_dir = os.path.abspath(os.getcwd())
+    normalized_save_path = os.path.abspath(os.path.normpath(save_path))
+    # Ensure the save path is within the current working directory
+    if not (normalized_save_path == base_dir or normalized_save_path.startswith(base_dir + os.sep)):
+        raise ValueError(f"Refusing to write outside the working directory: {normalized_save_path}")
+    save_path = normalized_save_path
+
     torch.set_num_threads(8)
     n_local_experts = n_experts // mp
     state_dicts = [{} for _ in range(mp)]
