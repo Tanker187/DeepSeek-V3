@@ -8,6 +8,10 @@ jobs:
   stale:
     if: ${{ github.repository == 'deepseek-ai/DeepSeek-V3' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     steps:
       - name: "Mark and close stale issues"
         uses: actions/stale@v9
